@@ -1,0 +1,6 @@
+build/
+posix-shell
+a.out
+*.zip
+.posix_history
+.posix_history.lock
