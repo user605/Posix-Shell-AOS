@@ -48,6 +48,30 @@
     "output": "build/history.o"
   },
   {
+    "file": "src/inspection.cpp",
+    "arguments": [
+      "/usr/bin/g++",
+      "-Iinclude",
+      "-D_POSIX_C_SOURCE=200809L",
+      "-std=c++17",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Wconversion",
+      "-Wshadow",
+      "-MMD",
+      "-MP",
+      "-c",
+      "src/inspection.cpp",
+      "-o",
+      "build/inspection.o"
+    ],
+    "directory": "/home/doink/job/resume/projects/posix",
+    "output": "build/inspection.o"
+  },
+  {
     "file": "src/main.cpp",
     "arguments": [
       "/usr/bin/g++",

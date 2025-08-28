@@ -1,4 +1,5 @@
 #include "shell.hpp"
+#include "inspection.hpp"
 #include "util.hpp"
 
 #include <algorithm>
@@ -8,12 +9,18 @@
 namespace posix_shell {
     bool Shell::isBuiltin(const std::string &name) const {
         return name == "cd" || name == "echo" || name == "pwd" || name == "history" ||
-               name == "exit";
+               name == "exit" || name == "ls" || name == "pinfo" || name == "search";
     }
 
     int Shell::builtin(const Command &command, bool child) {
         const auto &args = command.args;
         const auto &name = args[0];
+        if (name == "ls")
+            return listFiles(args, home_);
+        if (name == "pinfo")
+            return processInfo(args, home_, getpid());
+        if (name == "search")
+            return searchFiles(args);
         if (name == "cd") {
             if (args.size() > 2) {
                 std::cerr << "Invalid arguments\n";
