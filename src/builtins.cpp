@@ -9,7 +9,8 @@
 namespace posix_shell {
     bool Shell::isBuiltin(const std::string &name) const {
         return name == "cd" || name == "echo" || name == "pwd" || name == "history" ||
-               name == "exit" || name == "ls" || name == "pinfo" || name == "search";
+               name == "exit" || name == "ls" || name == "pinfo" || name == "search" ||
+               name == "jobs" || name == "fg" || name == "bg";
     }
 
     int Shell::builtin(const Command &command, bool child) {
@@ -18,9 +19,11 @@ namespace posix_shell {
         if (name == "ls")
             return listFiles(args, home_);
         if (name == "pinfo")
-            return processInfo(args, home_, getpid());
+            return processInfo(args, home_, shellPid_);
         if (name == "search")
             return searchFiles(args);
+        if (name == "jobs" || name == "fg" || name == "bg")
+            return jobBuiltin(command, child);
         if (name == "cd") {
             if (args.size() > 2) {
                 std::cerr << "Invalid arguments\n";

@@ -5,10 +5,11 @@ A modular C++17 implementation of `AOS_Assignment_2_M25_V1.pdf`.
 Build with `make` and start `./posix-shell` (or `./a.out`). The launch directory
 is the shell's home directory. The shell also accepts commands on standard input.
 
-The implementation currently supports `cd`, `pwd`, `echo`, `ls -al`, `pinfo`,
-recursive `search`, persistent `history`, `exit`, semicolon-separated commands
-and foreground executables. The parser
-recognizes the remaining operators; execution support is being added next.
+The implementation supports `cd`, `pwd`, `echo`, `ls -al`, `pinfo`, recursive
+`search`, persistent `history`, `exit`, semicolon-separated commands, pipelines,
+`<`, `>`, `>>`, and foreground/background executables. Process groups support
+terminal signals; `jobs`, `fg` and `bg` provide control of stopped jobs.
+Interactive completion and history navigation are being added next.
 
 `src/parser.cpp` tokenizes with `strtok`. `src/builtins.cpp` implements built-ins;
 `src/shell.cpp` runs commands; `src/history.cpp` stores up to 20 commands across
