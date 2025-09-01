@@ -76,7 +76,7 @@ namespace posix_shell {
                 finishPipeline();
             } else if (token == "|") {
                 finishCommand();
-                description += " | ";
+                description += " |";
             } else if (token == "<" || token == ">" || token == ">>") {
                 if (i + 1 == tokens.size() || operatorToken(tokens[i + 1])) {
                     throw std::runtime_error("expected a filename after '" + token + "'");

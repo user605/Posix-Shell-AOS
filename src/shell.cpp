@@ -1,4 +1,5 @@
 #include "shell.hpp"
+#include "editor.hpp"
 #include "util.hpp"
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <fcntl.h>
 #include <iostream>
 #include <pwd.h>
+#include <poll.h>
 #include <stdexcept>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -345,6 +347,12 @@ namespace posix_shell {
                     if (dup2(input, STDIN_FILENO) < 0)
                         _exit(1);
                     close(input);
+                } else if (pipeline.background && !interactive_) {
+                    const int nullInput = open("/dev/null", O_RDONLY);
+                    if (nullInput < 0 || dup2(nullInput, STDIN_FILENO) < 0)
+                        _exit(1);
+                    if (nullInput != STDIN_FILENO)
+                        close(nullInput);
                 }
                 if (output[1] >= 0) {
                     if (dup2(output[1], STDOUT_FILENO) < 0)
@@ -502,17 +510,52 @@ namespace posix_shell {
     }
 
     int Shell::run() {
-        std::string line;
         while (!exiting_) {
             processEvents();
-            if (interrupted) {
-                interrupted = 0;
-                std::cin.clear();
+            interrupted = 0;
+            std::string line;
+            if (interactive_) {
+                const auto input =
+                    readInteractiveLine(prompt(), history_.entries(), home_, signalPipe_[0], [&]() {
+                        processEvents();
+                        const bool cancel = interrupted;
+                        interrupted = 0;
+                        return cancel;
+                    });
+                if (!input)
+                    break;
+                line = *input;
+            } else {
+                // Do not read ahead into a C++ stream buffer: a foreground program
+                // (including another shell) must be able to read the remaining stdin.
+                bool eof = false;
+                for (;;) {
+                    struct pollfd fds[]{{STDIN_FILENO, POLLIN, 0}, {signalPipe_[0], POLLIN, 0}};
+                    if (poll(fds, 2, -1) < 0) {
+                        if (errno == EINTR)
+                            continue;
+                        eof = true;
+                        break;
+                    }
+                    if (fds[1].revents & POLLIN)
+                        processEvents();
+                    if (!(fds[0].revents & (POLLIN | POLLHUP | POLLERR)))
+                        continue;
+                    char c;
+                    const ssize_t count = read(STDIN_FILENO, &c, 1);
+                    if (count < 0 && errno == EINTR)
+                        continue;
+                    if (count <= 0) {
+                        eof = true;
+                        break;
+                    }
+                    if (c == '\n')
+                        break;
+                    line += c;
+                }
+                if (eof && line.empty())
+                    break;
             }
-            if (interactive_)
-                std::cout << prompt() << std::flush;
-            if (!std::getline(std::cin, line))
-                break;
             history_.add(line);
             try {
                 for (const auto &pipeline : parse(line)) {

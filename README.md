@@ -9,7 +9,8 @@ The implementation supports `cd`, `pwd`, `echo`, `ls -al`, `pinfo`, recursive
 `search`, persistent `history`, `exit`, semicolon-separated commands, pipelines,
 `<`, `>`, `>>`, and foreground/background executables. Process groups support
 terminal signals; `jobs`, `fg` and `bg` provide control of stopped jobs.
-Interactive completion and history navigation are being added next.
+The terminal editor supports TAB completion, editable up/down history, cursor
+movement and Ctrl-D logout, and redraws typed input after job notifications.
 
 `src/parser.cpp` tokenizes with `strtok`. `src/builtins.cpp` implements built-ins;
 `src/shell.cpp` runs commands; `src/history.cpp` stores up to 20 commands across
