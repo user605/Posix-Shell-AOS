@@ -18,11 +18,12 @@ namespace posix_shell {
         std::string line;
         while (std::getline(input, line)) {
             line = trim(line);
-            if (!line.empty() && (entries_.empty() || entries_.back() != line))
+            if (!line.empty() && (entries_.empty() || entries_.back() != line)) {
                 entries_.push_back(line);
+                if (entries_.size() > 20)
+                    entries_.erase(entries_.begin());
+            }
         }
-        if (entries_.size() > 20)
-            entries_.erase(entries_.begin(), entries_.end() - 20);
     }
 
     void History::add(const std::string &value) {

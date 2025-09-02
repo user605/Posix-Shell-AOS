@@ -137,7 +137,10 @@ namespace posix_shell {
     void Shell::initializeSignals() {
         if (interactive_) {
             setSignal(SIGTTIN, SIG_DFL);
-            while (tcgetpgrp(STDIN_FILENO) != shellGroup_) {
+            pid_t foreground;
+            while ((foreground = tcgetpgrp(STDIN_FILENO)) != shellGroup_) {
+                if (foreground < 0)
+                    throw std::runtime_error("cannot find terminal foreground group");
                 if (kill(-shellGroup_, SIGTTIN) < 0)
                     throw std::runtime_error("cannot acquire terminal");
             }
@@ -207,9 +210,15 @@ namespace posix_shell {
 
     void Shell::reapChildren(bool notify) {
         int status;
-        pid_t pid;
-        while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED | WCONTINUED)) > 0)
-            updateProcess(pid, status);
+        for (;;) {
+            const pid_t pid = waitpid(-1, &status, WNOHANG | WUNTRACED | WCONTINUED);
+            if (pid > 0)
+                updateProcess(pid, status);
+            else if (pid < 0 && errno == EINTR)
+                continue;
+            else
+                break;
+        }
         for (auto it = jobs_.begin(); it != jobs_.end();) {
             if (!it->background) {
                 ++it;

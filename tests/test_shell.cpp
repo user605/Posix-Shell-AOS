@@ -200,6 +200,16 @@ namespace {
             expect(expected);
             expect("> ");
         }
+        void waitForForegroundJob() {
+            const auto deadline = Clock::now() + 3000ms;
+            for (;;) {
+                const pid_t group = tcgetpgrp(fd);
+                if (group > 0 && group != pid)
+                    return;
+                require(Clock::now() < deadline, "job did not acquire foreground terminal");
+                std::this_thread::sleep_for(5ms);
+            }
+        }
         void logout() {
             send(std::string(1, 4));
             const auto deadline = Clock::now() + 3000ms;
@@ -210,7 +220,11 @@ namespace {
                     require(WIFEXITED(status), "shell did not exit normally");
                     return;
                 }
-                require(Clock::now() < deadline, "Ctrl-D did not exit");
+                char buffer[4096];
+                const ssize_t count = read(fd, buffer, sizeof(buffer));
+                if (count > 0)
+                    pending.append(buffer, static_cast<std::size_t>(count));
+                require(Clock::now() < deadline, "Ctrl-D did not exit:\n" + pending);
                 std::this_thread::sleep_for(10ms);
             }
         }
@@ -446,6 +460,52 @@ int main(int argc, char **argv) {
         require(std::count(extended.output.begin(), extended.output.end(), '\n') == 19,
                 "extended history count");
     });
+    test("concurrent sessions merge history without losing entries", [] {
+        Fixture f;
+        std::vector<pid_t> children;
+        for (int worker = 0; worker < 2; ++worker) {
+            const pid_t child = fork();
+            require(child >= 0, "fork history writer");
+            if (child == 0) {
+                History history(f.path + "/.posix_history");
+                for (int i = 0; i < 8; ++i)
+                    history.add("worker" + std::to_string(worker) + "-" + std::to_string(i));
+                _exit(0);
+            }
+            children.push_back(child);
+        }
+        for (pid_t child : children) {
+            int status = 0;
+            require(waitpid(child, &status, 0) == child && WIFEXITED(status) &&
+                        WEXITSTATUS(status) == 0,
+                    "history writer");
+        }
+        History history(f.path + "/.posix_history");
+        require(history.entries().size() == 16, "concurrent history lost an entry");
+    });
+    test("empty input, final line without newline and builtin errors", [] {
+        Fixture f;
+        require(run(f.path, "").output.empty(), "empty input output");
+        require(run(f.path, "echo final-line").output == "final-line\n", "unterminated final line");
+        const auto result = run(
+            f.path,
+            "cd -; cd missing; pwd extra; ls -x; ls absent; pinfo 0; pinfo 1 2; search; history -1; history 21; fg; bg %999; jobs extra\necho alive\n");
+        contains(result.output, "no previous directory");
+        contains(result.output, "invalid option");
+        contains(result.output, "invalid PID");
+        contains(result.output, "expected one");
+        contains(result.output, "expected a count");
+        contains(result.output, "no such job");
+        contains(result.output, "alive\n");
+    });
+    test("long and many-stage pipelines do not impose a fixed stage limit", [] {
+        Fixture f;
+        std::string command = "echo many-stages";
+        for (int i = 0; i < 35; ++i)
+            command += "|cat";
+        const auto result = run(f.path, command + "\n");
+        require(result.output == "many-stages\n", "many-stage pipeline");
+    });
     test("completion matches built-ins, PATH, hidden files and paths", [] {
         Fixture f;
         const auto before = currentDirectory();
@@ -493,6 +553,15 @@ int main(int argc, char **argv) {
         p.command("draft\033[A\033[B\033[B" + std::string(1, 21) + "echo down-ok", "down-ok\r\n");
         p.logout();
     });
+    test("terminal: long input and cursor editing survive viewport scrolling", [] {
+        Fixture f;
+        Pty p(f.path);
+        const std::string payload(300, 'x');
+        p.command("echo " + payload, payload + "\r\n");
+        p.command("echo ac\033[Db", "abc\r\n");
+        p.command("echo abxc\033[D\033[D\033[3~", "abc\r\n");
+        p.logout();
+    });
     test("terminal: idle Ctrl-C/Ctrl-Z and Ctrl-D logout", [] {
         Fixture f;
         Pty p(f.path);
@@ -535,7 +604,10 @@ int main(int argc, char **argv) {
         p.command("bg", "--helper wait | cat");
         p.command("jobs", "Running");
         p.send("fg\n");
-        std::this_thread::sleep_for(80ms);
+        // Consume the editor's echoed command before looking for the next
+        // prompt. Per-keystroke redraws can otherwise look like a fresh prompt.
+        p.expect("\r\n");
+        p.waitForForegroundJob();
         p.send(std::string(1, 3));
         p.expect("> ");
         p.command("echo resumed", "resumed\r\n");
